@@ -10,6 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@directus/sdk": "^21.3.0",
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.106.0",
     "@tailwindcss/vite": "^4.3.0",
     "firebase": "^12.13.0",
     "react": "^19.2.6",
