@@ -5,7 +5,12 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-    optimizeDeps: {
-    include: ['react-pdf'],
+  optimizeDeps: {
+    include: ['pdfjs-dist'],
   },
+  build: {
+    rollupOptions: {
+      external: ['pdfjs-dist/build/pdf.worker.min.mjs'],
+    }
+  }
 })

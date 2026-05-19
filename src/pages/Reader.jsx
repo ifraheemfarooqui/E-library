@@ -1,42 +1,189 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Document, Page, pdfjs } from "react-pdf";
 import { supabase } from "../supabase";
-import "react-pdf/dist/Page/AnnotationLayer.css";
-import "react-pdf/dist/Page/TextLayer.css";
+import * as pdfjsLib from "pdfjs-dist";
 
-// Required worker setup
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  "pdfjs-dist/build/pdf.worker.min.mjs",
+  import.meta.url
+).toString();
 
 export default function Reader() {
-  const { id }       = useParams();
-  const navigate     = useNavigate();
+  const { id }    = useParams();
+  const navigate  = useNavigate();
+  const canvasRef          = useRef(null);
+  const scrollContainerRef = useRef(null);
+  const renderTask         = useRef(null);
 
-  const [book, setBook]           = useState(null);
-  const [numPages, setNumPages]   = useState(null);
-  const [pageNumber, setPageNumber] = useState(1);
-  const [zoom, setZoom]           = useState(1.0);
-  const [viewMode, setViewMode]   = useState("paginated"); // paginated | scroll
+  const [book, setBook]               = useState(null);
+  const [pdfDoc, setPdfDoc]           = useState(null);
+  const [pageNumber, setPageNumber]   = useState(1);
+  const [numPages, setNumPages]       = useState(null);
+  const [zoom, setZoom]               = useState(1.2);
+  const [viewMode, setViewMode]       = useState("paginated");
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState("");
+  const [loading, setLoading]         = useState(true);
+  const [rendering, setRendering]     = useState(false);
+  const [error, setError]             = useState("");
 
-  useEffect(() => {
-    fetchBook();
-  }, [id]);
+  const isRendering = useRef(false);
+  const zoomRef = useRef(zoom);
 
-  // Save progress when page changes
-  useEffect(() => {
-    if (book && numPages) saveProgress();
-  }, [pageNumber]);
+  // Load book on mount
+useEffect(() => {
+  fetchBook();
+}, [id]);
+
+// Render page ONLY when pageNumber changes
+useEffect(() => {
+  if (pdfDoc && viewMode === "paginated") {
+    renderPage(pageNumber);
+  }
+}, [pdfDoc, pageNumber]);
+
+useEffect(() => {
+  if (!pdfDoc) return;
+  if (viewMode === "paginated") {
+    renderPage(pageNumber, zoom);
+  } else {
+    renderAllPages();
+  }
+}, [zoom]);
+
+// View mode switched
+useEffect(() => {
+  if (!pdfDoc) return;
+  if (viewMode === "scroll") {
+    isRendering.current = false; // reset lock
+    setTimeout(() => renderAllPages(), 100);
+  } else {
+    setTimeout(() => renderPage(pageNumber), 100);
+  }
+}, [viewMode]);
+
+// Save progress
+useEffect(() => {
+  if (book && numPages && pageNumber) saveProgress();
+}, [pageNumber]);
 
   const fetchBook = async () => {
     const { data, error } = await supabase
-      .from("books").select("*").eq("id", id).single();
-    if (error) { setError("Book not found."); return; }
+      .from("books")
+      .select("*")
+      .eq("id", id)
+      .single();
+
+    if (error || !data) {
+      setError("Book not found.");
+      setLoading(false);
+      return;
+    }
+
     setBook(data);
     setLoading(false);
-    await loadProgress(data.id);
+    if (data.file_url) loadPDF(data.file_url);
+  };
+
+  const loadPDF = async (url) => {
+    try {
+      const loadingTask = pdfjsLib.getDocument({ url, withCredentials: false });
+      const pdf = await loadingTask.promise;
+      setPdfDoc(pdf);
+      setNumPages(pdf.numPages);
+      await loadProgress(id);
+    } catch (err) {
+      console.error("PDF load error:", err);
+      setError("Failed to load PDF: " + err.message);
+    }
+  };
+
+  const renderPage = async (num) => {
+    if (!pdfDoc || !canvasRef.current) return;
+
+    const scale = zoomLevel ?? zoom;
+
+    if (renderTask.current) {
+      renderTask.current.cancel();
+      renderTask.current = null;
+    }
+
+    setRendering(true);
+    try {
+      const page     = await pdfDoc.getPage(num);
+      const viewport = page.getViewport({ scale});
+      const canvas   = canvasRef.current;
+      const ctx      = canvas.getContext("2d");
+
+      canvas.width  = viewport.width;
+      canvas.height = viewport.height;
+
+      const task = page.render({ canvasContext: ctx, viewport });
+      renderTask.current = task;
+      await task.promise;
+    } catch (err) {
+      if (err?.name !== "RenderingCancelledException") {
+        console.error("Render error:", err);
+      }
+    } finally {
+      setRendering(false);
+    }
+  };
+
+ const renderAllPages = async () => {
+  if (!pdfDoc || !scrollContainerRef.current) return;
+  if (isRendering.current) return; // ✅ prevent duplicate calls
+
+  isRendering.current = true;
+  const container = scrollContainerRef.current;
+  container.innerHTML = "";
+  setRendering(true);
+
+  const totalPages = pdfDoc.numPages;
+  const canvases = [];
+  
+
+  for (let i = 1; i <= totalPages; i++) {
+    const wrapper         = document.createElement("div");
+    wrapper.style.cssText = "margin-bottom:16px;position:relative;display:flex;justify-content:center;";
+
+    const canvas          = document.createElement("canvas");
+    canvas.style.cssText  = "display:block;box-shadow:0 4px 24px rgba(0,0,0,0.4);";
+
+    const badge           = document.createElement("div");
+    badge.textContent     = `Page ${i}`;
+    badge.style.cssText   = "position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.5);color:#fff;font-size:11px;padding:2px 8px;border-radius:4px;font-family:Outfit,sans-serif;pointer-events:none;";
+
+    wrapper.appendChild(canvas);
+    wrapper.appendChild(badge);
+    container.appendChild(wrapper);
+    canvases.push({ canvas, pageNum: i });
+  }
+
+  for (const { canvas, pageNum } of canvases) {
+    try {
+      const page     = await pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: zoom });
+      canvas.width   = viewport.width;
+      canvas.height  = viewport.height;
+      const ctx      = canvas.getContext("2d");
+      await page.render({ canvasContext: ctx, viewport }).promise;
+    } catch (err) {
+      console.error(`Error rendering page ${pageNum}:`, err);
+    }
+  }
+
+  isRendering.current = false; // ✅ release lock
+  setRendering(false);
+};
+
+  const handleViewMode = (v) => {
+    setViewMode(v);
+    if (v === "scroll" && pdfDoc) {
+      setTimeout(() => renderAllPages(), 100);
+    }
+    if (v === "paginated" && pdfDoc) {
+      setTimeout(() => renderPage(pageNumber), 100);
+    }
   };
 
   const loadProgress = async (bookId) => {
@@ -53,7 +200,7 @@ export default function Reader() {
 
   const saveProgress = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !book) return;
+    if (!user || !book || !numPages) return;
     const progress = Math.round((pageNumber / numPages) * 100);
     await supabase.from("user_books").upsert({
       user_id:   user.id,
@@ -64,18 +211,23 @@ export default function Reader() {
     }, { onConflict: "user_id,book_id" });
   };
 
-  const onDocumentLoadSuccess = ({ numPages }) => {
-    setNumPages(numPages);
-  };
-
   const goToPage = (n) => {
-    const p = Math.max(1, Math.min(n, numPages || 1));
+    const p = Math.max(1, Math.min(Number(n), numPages || 1));
     setPageNumber(p);
   };
+const zoomIn  = () => {
+  const newZoom = Math.min(3.0, parseFloat((zoom + 0.2).toFixed(1)));
+  setZoom(newZoom);
+  zoomRef.current = newZoom; // ✅ always up to date
+};
 
-  const zoomIn  = () => setZoom(z => Math.min(2.0, parseFloat((z + 0.25).toFixed(2))));
-  const zoomOut = () => setZoom(z => Math.max(0.5, parseFloat((z - 0.25).toFixed(2))));
+const zoomOut = () => {
+  const newZoom = Math.max(0.5, parseFloat((zoom - 0.2).toFixed(1)));
+  setZoom(newZoom);
+  zoomRef.current = newZoom; // ✅ always up to date
+};
 
+  // ── Loading screen ──────────────────────────────────────────────
   if (loading) return (
     <div className="min-h-screen bg-[#0e0c1a] flex items-center justify-center">
       <div className="text-center">
@@ -85,50 +237,55 @@ export default function Reader() {
     </div>
   );
 
+  // ── Error screen ─────────────────────────────────────────────────
   if (error) return (
     <div className="min-h-screen bg-[#0e0c1a] flex items-center justify-center">
       <div className="text-center">
+        <p className="text-5xl mb-4">📄</p>
         <p className="text-[#f09595] mb-4">{error}</p>
         <button onClick={() => navigate("/library")}
-          className="bg-[#6c5ce7] text-white px-4 py-2 rounded-lg text-sm">
+          className="bg-[#6c5ce7] text-white px-5 py-2 rounded-lg text-sm hover:bg-[#7c6cf0] transition">
           Back to Library
         </button>
       </div>
     </div>
   );
 
+  // ── Main reader ───────────────────────────────────────────────────
   return (
     <div className="flex flex-col h-screen bg-[#0e0c1a] font-[Outfit] text-white overflow-hidden">
 
-      {/* Top bar */}
+      {/* ── Top bar ── */}
       <div className="flex items-center justify-between px-5 py-3 bg-[#13102b] border-b border-white/8 flex-shrink-0">
         <button onClick={() => navigate("/library")}
-          className="flex items-center gap-2 text-[#9b8fc0] hover:text-white text-sm transition">
+          className="flex items-center gap-2 text-[#9b8fc0] hover:text-white text-sm transition flex-shrink-0">
           ← Library
         </button>
-        <div className="text-center flex-1 px-4">
+        <div className="text-center flex-1 px-4 min-w-0">
           <p className="font-[Cormorant_Garamond] text-base font-semibold truncate">{book?.title}</p>
           <p className="text-xs text-[#9b8fc0]">{book?.author}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button onClick={() => setSidebarOpen(!sidebarOpen)}
             className={`w-8 h-8 rounded-lg border text-sm flex items-center justify-center transition ${
-              sidebarOpen ? "bg-[#6c5ce7] border-[#6c5ce7] text-white" : "bg-white/5 border-white/10 text-[#9b8fc0] hover:text-white"
+              sidebarOpen
+                ? "bg-[#6c5ce7] border-[#6c5ce7] text-white"
+                : "bg-white/5 border-white/10 text-[#9b8fc0] hover:text-white"
             }`}>≡</button>
-          <a href={book?.file_url} download
+          <a href={book?.file_url} target="_blank" rel="noreferrer"
             className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-[#9b8fc0] hover:text-white text-sm flex items-center justify-center transition">
             ↓
           </a>
         </div>
       </div>
 
-      {/* Toolbar */}
+      {/* ── Toolbar ── */}
       <div className="flex items-center justify-between px-5 py-2 bg-[#0e0c1a] border-b border-white/5 flex-shrink-0 gap-4">
 
         {/* View toggle */}
-        <div className="flex bg-white/5 border border-white/10 rounded-lg p-0.5 gap-0.5">
-          {["paginated","scroll"].map(v => (
-            <button key={v} onClick={() => setViewMode(v)}
+        <div className="flex bg-white/5 border border-white/10 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
+          {["paginated", "scroll"].map(v => (
+            <button key={v} onClick={() => handleViewMode(v)}
               className={`px-3 py-1 rounded-md text-xs capitalize transition ${
                 viewMode === v ? "bg-[#6c5ce7] text-white" : "text-[#9b8fc0] hover:text-white"
               }`}>
@@ -137,49 +294,67 @@ export default function Reader() {
           ))}
         </div>
 
-        {/* Page navigation */}
+        {/* Page navigation — paginated only */}
         {viewMode === "paginated" && (
           <div className="flex items-center gap-2">
-            <button onClick={() => goToPage(pageNumber - 1)} disabled={pageNumber <= 1}
+            <button
+              onClick={() => goToPage(pageNumber - 1)}
+              disabled={pageNumber <= 1}
               className="flex items-center gap-1 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-[#9b8fc0] hover:text-white disabled:opacity-30 transition">
               ‹ Prev
             </button>
             <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs">
               <input
-                type="number" value={pageNumber} min={1} max={numPages || 1}
-                onChange={e => goToPage(parseInt(e.target.value))}
+                type="number"
+                value={pageNumber}
+                min={1}
+                max={numPages || 1}
+                onChange={e => goToPage(e.target.value)}
                 className="bg-transparent outline-none text-white w-8 text-center text-xs"/>
               <span className="text-[#9b8fc0]">/ {numPages || "—"}</span>
             </div>
-            <button onClick={() => goToPage(pageNumber + 1)} disabled={pageNumber >= (numPages || 1)}
+            <button
+              onClick={() => goToPage(pageNumber + 1)}
+              disabled={pageNumber >= (numPages || 1)}
               className="flex items-center gap-1 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-[#9b8fc0] hover:text-white disabled:opacity-30 transition">
               Next ›
             </button>
           </div>
         )}
 
-        {/* Zoom controls */}
-        <div className="flex items-center gap-2">
-          <button onClick={zoomOut} disabled={zoom <= 0.5}
-            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 text-[#9b8fc0] hover:text-white disabled:opacity-30 transition flex items-center justify-center text-sm">
+        {/* Scroll mode label */}
+        {viewMode === "scroll" && (
+          <p className="text-xs text-[#9b8fc0]">
+            {rendering ? "Rendering all pages..." : `${numPages || "—"} pages total`}
+          </p>
+        )}
+
+        {/* Zoom */}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={zoomOut}
+            disabled={zoom <= 0.5}
+            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 text-[#9b8fc0] hover:text-white disabled:opacity-30 transition flex items-center justify-center text-base">
             −
           </button>
           <span className="text-xs text-white min-w-[44px] text-center">
             {Math.round(zoom * 100)}%
           </span>
-          <button onClick={zoomIn} disabled={zoom >= 2.0}
-            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 text-[#9b8fc0] hover:text-white disabled:opacity-30 transition flex items-center justify-center text-sm">
+          <button
+            onClick={zoomIn}
+            disabled={zoom >= 3.0}
+            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 text-[#9b8fc0] hover:text-white disabled:opacity-30 transition flex items-center justify-center text-base">
             +
           </button>
         </div>
       </div>
 
-      {/* Body */}
+      {/* ── Body ── */}
       <div className="flex flex-1 overflow-hidden">
 
         {/* Sidebar */}
         {sidebarOpen && (
-          <div className="w-52 bg-[#13102b] border-r border-white/5 flex flex-col flex-shrink-0 overflow-hidden">
+          <div className="w-52 bg-[#13102b] border-r border-white/5 flex flex-col flex-shrink-0 overflow-y-auto">
             <p className="text-[10px] text-[#9b8fc0] uppercase tracking-widest px-4 py-3 border-b border-white/5">
               Book info
             </p>
@@ -187,11 +362,13 @@ export default function Reader() {
               {book?.cover_url
                 ? <img src={book.cover_url} alt={book.title}
                     className="w-full aspect-[2/3] object-cover rounded-lg mb-3"/>
-                : <div className="w-full aspect-[2/3] bg-[#2D1B69] rounded-lg flex items-center justify-center text-3xl mb-3">📖</div>
+                : <div className="w-full aspect-[2/3] bg-[#2D1B69] rounded-lg flex items-center justify-center text-3xl mb-3">
+                    📖
+                  </div>
               }
               <p className="text-sm font-medium text-white">{book?.title}</p>
-              <p className="text-xs text-[#9b8fc0] mt-0.5">{book?.author}</p>
-              <span className="text-[10px] bg-[#6c5ce7]/20 text-[#a78bfa] px-2 py-0.5 rounded-full mt-2 inline-block">
+              <p className="text-xs text-[#9b8fc0] mt-0.5 mb-2">{book?.author}</p>
+              <span className="text-[10px] bg-[#6c5ce7]/20 text-[#a78bfa] px-2 py-0.5 rounded-full">
                 {book?.category}
               </span>
             </div>
@@ -199,7 +376,8 @@ export default function Reader() {
               <div className="p-4">
                 <p className="text-[10px] text-[#9b8fc0] uppercase tracking-widest mb-2">Progress</p>
                 <div className="h-1 bg-white/10 rounded-full overflow-hidden mb-1">
-                  <div className="h-full bg-[#6c5ce7] rounded-full transition-all"
+                  <div
+                    className="h-full bg-[#6c5ce7] rounded-full transition-all"
                     style={{ width: `${Math.round((pageNumber / numPages) * 100)}%` }}/>
                 </div>
                 <p className="text-xs text-[#9b8fc0]">
@@ -207,67 +385,69 @@ export default function Reader() {
                 </p>
               </div>
             )}
+            {/* Description */}
+            {book?.description && (
+              <div className="p-4 border-t border-white/5">
+                <p className="text-[10px] text-[#9b8fc0] uppercase tracking-widest mb-2">About</p>
+                <p className="text-xs text-[#9b8fc0] leading-relaxed">{book.description}</p>
+              </div>
+            )}
           </div>
         )}
 
-        {/* PDF Canvas */}
-        <div className="flex-1 overflow-auto bg-[#1a1728] flex justify-center p-8">
-          {book?.file_url ? (
-            <Document
-              file={book.file_url}
-              onLoadSuccess={onDocumentLoadSuccess}
-              onLoadError={() => setError("Failed to load PDF.")}
-              loading={
-                <div className="flex items-center justify-center h-64">
-                  <div className="w-8 h-8 border-2 border-[#6c5ce7] border-t-transparent rounded-full animate-spin"/>
-                </div>
-              }>
-              {viewMode === "paginated" ? (
-                <Page
-                  pageNumber={pageNumber}
-                  scale={zoom}
-                  renderTextLayer={true}
-                  renderAnnotationLayer={true}
-                  className="shadow-2xl rounded-sm"
-                />
-              ) : (
-                Array.from({ length: numPages || 0 }, (_, i) => (
-                  <div key={i + 1} className="mb-4">
-                    <Page
-                      pageNumber={i + 1}
-                      scale={zoom}
-                      renderTextLayer={true}
-                      renderAnnotationLayer={true}
-                      className="shadow-2xl rounded-sm"
-                    />
-                  </div>
-                ))
-              )}
-            </Document>
+        {/* ── Canvas area ── */}
+        <div className="flex-1 overflow-auto bg-[#1a1728] flex justify-center p-8 relative">
+
+          {/* Rendering indicator */}
+          {rendering && (
+            <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-lg z-10">
+              <div className="w-3 h-3 border border-[#6c5ce7] border-t-transparent rounded-full animate-spin"/>
+              <span className="text-xs text-[#9b8fc0]">Rendering...</span>
+            </div>
+          )}
+
+          {pdfDoc ? (
+            viewMode === "paginated" ? (
+              <canvas
+                ref={canvasRef}
+                style={{ maxWidth: "100%", display: "block", boxShadow: "0 4px 32px rgba(0,0,0,0.5)" }}
+              />
+            ) : (
+              <div ref={scrollContainerRef} className="flex flex-col items-center w-full"/>
+            )
           ) : (
-            <div className="text-center text-[#9b8fc0] py-20">
-              <p className="text-4xl mb-4 opacity-30">📄</p>
-              <p>No PDF file available for this book</p>
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="w-8 h-8 border-2 border-[#6c5ce7] border-t-transparent rounded-full animate-spin mx-auto mb-3"/>
+                <p className="text-xs text-[#9b8fc0]">Loading PDF...</p>
+              </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Progress bar */}
+      {/* ── Progress bar ── */}
       {numPages && (
         <div className="h-0.5 bg-white/5 flex-shrink-0">
-          <div className="h-full bg-[#6c5ce7] transition-all"
+          <div
+            className="h-full bg-[#6c5ce7] transition-all duration-300"
             style={{ width: `${Math.round((pageNumber / numPages) * 100)}%` }}/>
         </div>
       )}
 
-      {/* Status bar */}
+      {/* ── Status bar ── */}
       <div className="flex items-center justify-between px-5 py-2 bg-[#13102b] border-t border-white/5 flex-shrink-0">
         <span className="text-xs text-[#9b8fc0]">
-          Page {pageNumber} of {numPages || "—"} · {book?.category}
+          {viewMode === "paginated"
+            ? `Page ${pageNumber} of ${numPages || "—"} · ${book?.category || ""}`
+            : `${numPages || "—"} pages · ${book?.category || ""}`
+          }
         </span>
         <span className="text-xs text-[#9b8fc0]">
-          {numPages ? `~${Math.round(((numPages - pageNumber) * 2))} min left` : ""}
+          {numPages && viewMode === "paginated"
+            ? `~${Math.round((numPages - pageNumber) * 2)} min left`
+            : ""
+          }
         </span>
       </div>
     </div>
