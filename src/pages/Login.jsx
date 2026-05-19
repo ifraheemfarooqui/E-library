@@ -15,7 +15,7 @@ export default function Login() {
     if (error) {
       setError(error.message);
     } else {
-      navigate("/library");
+      setTimeout(() => navigate("/home"), 2000);
     }
   };
 

@@ -24,7 +24,8 @@ export default function SignUp() {
     if (error) {
       setError(error.message);
     } else {
-      setSuccess("Account created! Check your email to confirm then sign in.");
+      setSuccess("Account created!");
+      setTimeout(() => navigate("/home"), 2000);
     }
   };
 

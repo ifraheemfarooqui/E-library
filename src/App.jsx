@@ -1,5 +1,4 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import ProtectedRoute from "./components/ProtectedRoute";
 import Login   from "./pages/Login";
 import SignUp  from "./pages/SignUp";
 import Home    from "./pages/Home";
@@ -7,6 +6,8 @@ import MyBooks from "./pages/MyBooks";
 import Profile from "./pages/Profile";
 import Library from "./pages/Libaray";
 import Admin from "./pages/Admin";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Reader from "./pages/Reader";
 
 export default function App() {
   return (
@@ -16,8 +17,6 @@ export default function App() {
         <Route path="/"       element={<Login />} />
         <Route path="/login"  element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
-
-        {/* Protected routes — must be logged in */}
         <Route path="/home" element={
           <ProtectedRoute><Home /></ProtectedRoute>
         }/>
@@ -32,6 +31,9 @@ export default function App() {
         }/>
         <Route path="/admin" element={
   <ProtectedRoute><Admin/></ProtectedRoute>
+}/>
+<Route path="/reader/:id" element={
+  <ProtectedRoute><Reader /></ProtectedRoute>
 }/>
       </Routes>
     </BrowserRouter>

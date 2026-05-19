@@ -39,13 +39,13 @@ export default function AdminUpload({ onUploadComplete }) {
         const ext  = coverFile.name.split(".").pop();
         const path = `covers/${Date.now()}.${ext}`;
         const { error: coverError } = await supabase.storage
-          .from("covers")
+          .from("cover")
           .upload(path, coverFile, { cacheControl: "3600", upsert: false });
 
         if (coverError) throw new Error("Cover upload failed: " + coverError.message);
 
         const { data: coverUrl } = supabase.storage
-          .from("covers")
+          .from("cover")
           .getPublicUrl(path);
         cover_url = coverUrl.publicUrl;
       }
