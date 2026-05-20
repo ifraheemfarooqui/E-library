@@ -63,8 +63,10 @@ useEffect(() => {
 
 // Save progress
 useEffect(() => {
-  if (book && numPages && pageNumber) saveProgress();
-}, [pageNumber]);
+  if (book?.id && pageNumber && numPages) {
+    saveProgress(book.id, pageNumber, numPages);
+  }
+}, [pageNumber, numPages, book]);
 
   const fetchBook = async () => {
     const { data, error } = await supabase
@@ -97,10 +99,8 @@ useEffect(() => {
     }
   };
 
-  const renderPage = async (num) => {
+ const renderPage = async (num) => {
     if (!pdfDoc || !canvasRef.current) return;
-
-    const scale = zoomLevel ?? zoom;
 
     if (renderTask.current) {
       renderTask.current.cancel();
@@ -110,12 +110,16 @@ useEffect(() => {
     setRendering(true);
     try {
       const page     = await pdfDoc.getPage(num);
-      const viewport = page.getViewport({ scale});
+      const viewport = page.getViewport({ scale: zoom });
       const canvas   = canvasRef.current;
       const ctx      = canvas.getContext("2d");
 
       canvas.width  = viewport.width;
       canvas.height = viewport.height;
+
+
+      canvas.style.width = `${viewport.width}px`;
+canvas.style.height = `${viewport.height}px`;
 
       const task = page.render({ canvasContext: ctx, viewport });
       renderTask.current = task;
@@ -186,31 +190,52 @@ useEffect(() => {
     }
   };
 
-  const loadProgress = async (bookId) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data } = await supabase
-      .from("user_books")
-      .select("last_page")
-      .eq("user_id", user.id)
-      .eq("book_id", bookId)
-      .single();
-    if (data?.last_page) setPageNumber(data.last_page);
-  };
+const loadProgress = async (bookId) => {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
 
-  const saveProgress = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !book || !numPages) return;
-    const progress = Math.round((pageNumber / numPages) * 100);
-    await supabase.from("user_books").upsert({
-      user_id:   user.id,
-      book_id:   book.id,
-      last_page: pageNumber,
-      progress,
-      last_read: new Date().toISOString(),
-    }, { onConflict: "user_id,book_id" });
-  };
+  const { data, error } = await supabase
+    .from("user_books")
+    .select("last_page, progress")
+    .eq("user_id", user.id)
+    .eq("book_id", bookId)
+    .single();
 
+  if (error) return;
+
+  if (data?.last_page) setPageNumber(data.last_page);
+
+  // optional: you can use progress if needed in UI
+  console.log("Saved progress:", data?.progress);
+};
+const saveProgress = async (bookId, page, totalPages) => {
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return;
+
+  const progress = totalPages ? Math.round((page / totalPages) * 100) : 0;
+
+  const { error } = await supabase
+    .from("user_books")
+    .upsert(
+      {
+        user_id: user.id,
+        book_id: bookId,
+        last_page: page,
+        progress: progress, // ✅ added
+        last_read: new Date(),
+      },
+      {
+        onConflict: "user_id,book_id",
+      }
+    );
+
+  if (error) {
+    console.error("Save progress failed:", error);
+  }
+};
   const goToPage = (n) => {
     const p = Math.max(1, Math.min(Number(n), numPages || 1));
     setPageNumber(p);
