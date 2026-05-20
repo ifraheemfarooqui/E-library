@@ -4,7 +4,7 @@ import SignUp  from "./pages/SignUp";
 import Home    from "./pages/Home";
 import MyBooks from "./pages/MyBooks";
 import Profile from "./pages/Profile";
-import Library from "./pages/Libaray";
+import Library from "./pages/Library";
 import Admin from "./pages/Admin";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Reader from "./pages/Reader";

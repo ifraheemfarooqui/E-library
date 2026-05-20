@@ -86,18 +86,27 @@ useEffect(() => {
     if (data.file_url) loadPDF(data.file_url);
   };
 
-  const loadPDF = async (url) => {
-    try {
-      const loadingTask = pdfjsLib.getDocument({ url, withCredentials: false });
-      const pdf = await loadingTask.promise;
-      setPdfDoc(pdf);
-      setNumPages(pdf.numPages);
-      await loadProgress(id);
-    } catch (err) {
-      console.error("PDF load error:", err);
-      setError("Failed to load PDF: " + err.message);
-    }
-  };
+const loadPDF = async (url) => {
+  try {
+    // ✅ Step 1 — get saved page first
+    const savedPage = await loadProgress(id);
+
+    // ✅ Step 2 — load the PDF
+    const loadingTask = pdfjsLib.getDocument({ url, withCredentials: false });
+    const pdf = await loadingTask.promise;
+
+    // ✅ Step 3 — set page number BEFORE pdfDoc
+    setNumPages(pdf.numPages);
+    if (savedPage > 1) setPageNumber(savedPage);
+
+    // ✅ Step 4 — set pdfDoc LAST so useEffect fires with correct page
+    setPdfDoc(pdf);
+
+  } catch (err) {
+    console.error("PDF load error:", err);
+    setError("Failed to load PDF: " + err.message);
+  }
+};
 
  const renderPage = async (num) => {
     if (!pdfDoc || !canvasRef.current) return;
@@ -192,22 +201,18 @@ canvas.style.height = `${viewport.height}px`;
 
 const loadProgress = async (bookId) => {
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return;
-
-  const { data, error } = await supabase
+  if (!user) return 1;
+  const { data } = await supabase
     .from("user_books")
-    .select("last_page, progress")
+    .select("last_page")
     .eq("user_id", user.id)
     .eq("book_id", bookId)
     .single();
-
-  if (error) return;
-
-  if (data?.last_page) setPageNumber(data.last_page);
-
-  // optional: you can use progress if needed in UI
-  console.log("Saved progress:", data?.progress);
+  return data?.last_page || 1; // ✅ return the page instead of setting it
 };
+
+
+
 const saveProgress = async (bookId, page, totalPages) => {
   const {
     data: { user },
