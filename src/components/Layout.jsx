@@ -57,7 +57,7 @@ export default function Layout({ children, title }) {
 
       {/* ── Sidebar ── */}
 <aside className={`
-  fixed md:relative top-0 left-0 h-full z-30
+  fixed md:relative top-0 left-0 h-100% z-30
   ${sidebarOpen ? "w-56 px-3" : "w-0 px-0 overflow-hidden"}
   bg-[#13102b] border-r border-white/5
   flex flex-col py-6
