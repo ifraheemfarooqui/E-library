@@ -110,42 +110,43 @@ const handleUpload = async (e) => {
     <Layout title="Library">
 
       {/* Header — stacks on mobile */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h2 className="font-[Cormorant_Garamond] text-2xl sm:text-3xl font-semibold text-white mb-1">
-            Explore the <em className="text-[#a78bfa]">library</em>
-          </h2>
-          <p className="text-[#9b8fc0] text-sm">Browse books, PDFs, and journals</p>
-        </div>
-      </div>
+<div className="flex items-center justify-center mb-4 sm:mb-6">
+  <div className="text-center">
+    <h2 className="font-[Cormorant_Garamond] text-xl sm:text-2xl md:text-3xl font-semibold text-white mb-0.5">
+      Explore the <em className="text-[#a78bfa]">library</em>
+    </h2>
+    <p className="text-[#9b8fc0] text-xs sm:text-sm">Browse books, PDFs, and journals</p>
+  </div>
+</div>
 
       {/* Search */}
-      <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 w-full max-w-md mb-5">
-        <span className="text-[#9b8fc0] text-sm">🔍</span>
-        <input
-          value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Search by title, author or category..."
-          className="bg-transparent outline-none text-white text-sm flex-1 placeholder-[#5a4f7a]"/>
-      </div>
+<div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 sm:px-4 py-2 sm:py-2.5 w-full max-w-md mb-4">
+  <span className="text-[#9b8fc0] text-sm flex-shrink-0">🔍</span>
+  <input
+    value={search} onChange={e => setSearch(e.target.value)}
+    placeholder="Search title, author, category..."
+    className="bg-transparent outline-none text-white text-xs sm:text-sm flex-1 placeholder-[#5a4f7a] min-w-0"/>
+</div>
+
 
       {/* ✅ Filters — scrollable on mobile */}
-      <div className="flex gap-2 flex-wrap mb-6 overflow-x-auto pb-1">
-        {CATEGORIES.map(cat => (
-          <button
-            key={cat}
-            onClick={() => setFilter(cat)}
-            className={`px-4 py-1.5 rounded-full text-xs border transition flex-shrink-0 ${
-              filter === cat
-                ? "bg-[#6c5ce7] border-[#6c5ce7] text-white"
-                : "border-white/10 text-[#9b8fc0] hover:text-white hover:border-white/25"
-            }`}>
-            {cat}
-          </button>
-        ))}
-      </div>
+    <div className="flex gap-1.5 sm:gap-2 mb-4 sm:mb-6 overflow-x-auto pb-2 scrollbar-none">
+  {CATEGORIES.map(cat => (
+    <button
+      key={cat}
+      onClick={() => setFilter(cat)}
+      className={`px-3 sm:px-4 py-1 sm:py-1.5 rounded-full text-[10px] sm:text-xs border transition flex-shrink-0 ${
+        filter === cat
+          ? "bg-[#6c5ce7] border-[#6c5ce7] text-white"
+          : "border-white/10 text-[#9b8fc0] hover:text-white hover:border-white/25"
+      }`}>
+      {cat}
+    </button>
+  ))}
+</div>
 
       {/* Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 sm:gap-5">
+    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-4 md:gap-5">
         {loading
           ? Array.from({ length: 12 }).map((_, i) => (
               <div key={i} className="animate-pulse">

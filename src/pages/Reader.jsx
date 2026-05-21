@@ -21,7 +21,7 @@ export default function Reader() {
   const [numPages, setNumPages]       = useState(null);
   const [zoom, setZoom]               = useState(1.2);
   const [viewMode, setViewMode]       = useState("paginated");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth >= 768);
   const [loading, setLoading]         = useState(true);
   const [rendering, setRendering]     = useState(false);
   const [error, setError]             = useState("");
@@ -286,98 +286,81 @@ const zoomOut = () => {
     <div className="flex flex-col h-screen bg-[#0e0c1a] font-[Outfit] text-white overflow-hidden">
 
       {/* ── Top bar ── */}
-      <div className="flex items-center justify-between px-5 py-3 bg-[#13102b] border-b border-white/8 flex-shrink-0">
-        <button onClick={() => navigate("/library")}
-          className="flex items-center gap-2 text-[#9b8fc0] hover:text-white text-sm transition flex-shrink-0">
-          ← Library
-        </button>
-        <div className="text-center flex-1 px-4 min-w-0">
-          <p className="font-[Cormorant_Garamond] text-base font-semibold truncate">{book?.title}</p>
-          <p className="text-xs text-[#9b8fc0]">{book?.author}</p>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={() => setSidebarOpen(!sidebarOpen)}
-            className={`w-8 h-8 rounded-lg border text-sm flex items-center justify-center transition ${
-              sidebarOpen
-                ? "bg-[#6c5ce7] border-[#6c5ce7] text-white"
-                : "bg-white/5 border-white/10 text-[#9b8fc0] hover:text-white"
-            }`}>≡</button>
-          <a href={book?.file_url} target="_blank" rel="noreferrer"
-            className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 text-[#9b8fc0] hover:text-white text-sm flex items-center justify-center transition">
-            ↓
-          </a>
-        </div>
-      </div>
+<div className="flex items-center justify-between px-3 py-2.5 bg-[#13102b] border-b border-white/8 flex-shrink-0">
+  <button onClick={() => navigate("/library")}
+    className="flex items-center gap-1 text-[#9b8fc0] hover:text-white text-xs sm:text-sm transition flex-shrink-0">
+    ← <span className="hidden sm:inline">Library</span>
+  </button>
+  <div className="text-center flex-1 px-2 min-w-0">
+    <p className="font-[Cormorant_Garamond] text-sm sm:text-base font-semibold truncate">{book?.title}</p>
+    <p className="text-[10px] sm:text-xs text-[#9b8fc0] hidden sm:block truncate">{book?.author}</p>
+  </div>
+  <div className="flex items-center gap-1.5 flex-shrink-0">
+    <button onClick={() => setSidebarOpen(!sidebarOpen)}
+      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg border text-xs sm:text-sm flex items-center justify-center transition ${
+        sidebarOpen ? "bg-[#6c5ce7] border-[#6c5ce7] text-white" : "bg-white/5 border-white/10 text-[#9b8fc0]"
+      }`}>≡</button>
+    <a href={book?.file_url} target="_blank" rel="noreferrer"
+      className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white/5 border border-white/10 text-[#9b8fc0] hover:text-white text-xs sm:text-sm flex items-center justify-center transition">
+      ↓
+    </a>
+  </div>
+</div>
 
       {/* ── Toolbar ── */}
-      <div className="flex items-center justify-between px-5 py-2 bg-[#0e0c1a] border-b border-white/5 flex-shrink-0 gap-4">
+      <div className="flex items-center px-3 py-1.5 sm:py-2 bg-[#0e0c1a] border-b border-white/5 flex-shrink-0 gap-2 overflow-x-auto scrollbar-none">
 
         {/* View toggle */}
-        <div className="flex bg-white/5 border border-white/10 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
-          {["paginated", "scroll"].map(v => (
-            <button key={v} onClick={() => handleViewMode(v)}
-              className={`px-3 py-1 rounded-md text-xs capitalize transition ${
-                viewMode === v ? "bg-[#6c5ce7] text-white" : "text-[#9b8fc0] hover:text-white"
-              }`}>
-              {v}
-            </button>
-          ))}
-        </div>
+    <div className="flex bg-white/5 border border-white/10 rounded-lg p-0.5 gap-0.5 flex-shrink-0">
+    {["paginated","scroll"].map(v => (
+      <button key={v} onClick={() => handleViewMode(v)}
+        className={`px-2 py-0.5 sm:py-1 rounded-md text-[10px] sm:text-xs capitalize transition ${
+          viewMode === v ? "bg-[#6c5ce7] text-white" : "text-[#9b8fc0] hover:text-white"
+        }`}>
+        {v}
+      </button>
+    ))}
+  </div>
 
         {/* Page navigation — paginated only */}
-        {viewMode === "paginated" && (
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => goToPage(pageNumber - 1)}
-              disabled={pageNumber <= 1}
-              className="flex items-center gap-1 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-[#9b8fc0] hover:text-white disabled:opacity-30 transition">
-              ‹ Prev
-            </button>
-            <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-xs">
-              <input
-                type="number"
-                value={pageNumber}
-                min={1}
-                max={numPages || 1}
-                onChange={e => goToPage(e.target.value)}
-                className="bg-transparent outline-none text-white w-8 text-center text-xs"/>
-              <span className="text-[#9b8fc0]">/ {numPages || "—"}</span>
-            </div>
-            <button
-              onClick={() => goToPage(pageNumber + 1)}
-              disabled={pageNumber >= (numPages || 1)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg text-xs text-[#9b8fc0] hover:text-white disabled:opacity-30 transition">
-              Next ›
-            </button>
-          </div>
-        )}
+  {viewMode === "paginated" && (
+    <div className="flex items-center gap-1 flex-shrink-0">
+      <button onClick={() => goToPage(pageNumber - 1)} disabled={pageNumber <= 1}
+        className="w-6 h-6 sm:w-7 sm:h-7 bg-white/5 border border-white/10 rounded-lg text-xs text-[#9b8fc0] hover:text-white disabled:opacity-30 transition flex items-center justify-center">
+        ‹
+      </button>
+      <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[10px] sm:text-xs">
+        <input type="number" value={pageNumber} min={1} max={numPages || 1}
+          onChange={e => goToPage(e.target.value)}
+          className="bg-transparent outline-none text-white w-6 sm:w-8 text-center text-[10px] sm:text-xs"/>
+        <span className="text-[#9b8fc0]">/ {numPages || "—"}</span>
+      </div>
+      <button onClick={() => goToPage(pageNumber + 1)} disabled={pageNumber >= (numPages || 1)}
+        className="w-6 h-6 sm:w-7 sm:h-7 bg-white/5 border border-white/10 rounded-lg text-xs text-[#9b8fc0] hover:text-white disabled:opacity-30 transition flex items-center justify-center">
+        ›
+      </button>
+    </div>
+  )}
 
-        {/* Scroll mode label */}
-        {viewMode === "scroll" && (
-          <p className="text-xs text-[#9b8fc0]">
-            {rendering ? "Rendering all pages..." : `${numPages || "—"} pages total`}
-          </p>
-        )}
+  {viewMode === "scroll" && (
+    <p className="text-[10px] sm:text-xs text-[#9b8fc0] flex-shrink-0">
+      {rendering ? "Rendering..." : `${numPages || "—"} pages`}
+    </p>
+  )}
 
         {/* Zoom */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={zoomOut}
-            disabled={zoom <= 0.5}
-            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 text-[#9b8fc0] hover:text-white disabled:opacity-30 transition flex items-center justify-center text-base">
-            −
-          </button>
-          <span className="text-xs text-white min-w-[44px] text-center">
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            onClick={zoomIn}
-            disabled={zoom >= 3.0}
-            className="w-7 h-7 rounded-lg bg-white/5 border border-white/10 text-[#9b8fc0] hover:text-white disabled:opacity-30 transition flex items-center justify-center text-base">
-            +
-          </button>
-        </div>
-      </div>
+  <div className="flex items-center gap-1 flex-shrink-0 ml-auto">
+    <button onClick={zoomOut} disabled={zoom <= 0.5}
+      className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-white/5 border border-white/10 text-[#9b8fc0] hover:text-white disabled:opacity-30 transition flex items-center justify-center text-xs">
+      −
+    </button>
+    <span className="text-[10px] sm:text-xs text-white min-w-[36px] text-center">{Math.round(zoom * 100)}%</span>
+    <button onClick={zoomIn} disabled={zoom >= 3.0}
+      className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-white/5 border border-white/10 text-[#9b8fc0] hover:text-white disabled:opacity-30 transition flex items-center justify-center text-xs">
+      +
+    </button>
+  </div>
+</div>
 
       {/* ── Body ── */}
       <div className="flex flex-1 overflow-hidden">
